@@ -105,11 +105,10 @@ type SignInInputRequest struct {
 // 	UpdatedAt       time.Time `json:"updated_at" bson:"updated_at"`
 // }
 
-type bloodTransaction struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Patient_id string             `bson:"patient_id,omitempty" json:"patient_id"`
-	Quantity   int                `bson:"quantity,omitempty" json:"quantity"`
-	Donor_id   string             `bson:"donor_id,omitempty" json:"donor_id"`
+type Response struct {
+	Success    string      `json:"success,omitempty"`
+	SucessCode string      `json:"successCode,omitempty"`
+	Response   interface{} `json:"response,omitempty"`
 }
 
 type BloodDetailsRequest struct {

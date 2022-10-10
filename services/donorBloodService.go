@@ -13,6 +13,9 @@ import (
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/unidoc/unipdf/v3/common/license"
+	"github.com/unidoc/unipdf/v3/creator"
+	"github.com/unidoc/unipdf/v3/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -44,6 +47,10 @@ var CollectionPatient *mongo.Collection
 var CollectionLogin *mongo.Collection
 var ctx = context.TODO()
 var insertDocs int
+
+const dir = "data/download/"
+
+var fileName string
 
 func (c *Connection) Connect() {
 	clientOptions := options.Client().ApplyURI(c.Server)
@@ -80,6 +87,7 @@ func insertLoginData(email, pass, userId string) error {
 
 // ==========================================Donor detail======================================
 func (e *Connection) SaveDonorDetails(reqBody pojo.DonorDetailRequest) (string, error) {
+	file := "donorData" + fmt.Sprintf("%v", time.Now().Format("3_4_5_pm"))
 	saveData, err := SetValueInModel(reqBody)
 	if err != nil {
 		return "", errors.New("Unable to parse date")
@@ -96,7 +104,11 @@ func (e *Connection) SaveDonorDetails(reqBody pojo.DonorDetailRequest) (string, 
 		return "", err
 	}
 	fmt.Println(str)
+	_, err = writeToPdf(dir, file, saveData)
 
+	if err != nil {
+		return "", err
+	}
 	resultId := data.InsertedID
 	email := reqBody.Email
 	pass := reqBody.Password
@@ -158,6 +170,7 @@ func (e *Connection) ApplyBloodPatientDetails(reqBody pojo.PatientDetailRequest,
 	}
 	fmt.Println(deduct)
 
+	ReceiptOfBloodRecieved(dir, reqBody)
 	return deduct, nil
 }
 
@@ -532,7 +545,7 @@ func GenerateAllTokens(email string) (signedToken string, err error) {
 	claims := &SignedDetails{
 		Email: email,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Local().Add(time.Hour * time.Duration(24)).Unix(),
+			ExpiresAt: time.Now().Local().Add(time.Hour * time.Duration(1)).Unix(),
 		},
 	}
 
@@ -571,4 +584,194 @@ func ValidateToken(signedToken string) (string, error) {
 	}
 
 	return msg, err
+}
+
+func writeToPdf(dir, file string, donorData pojo.DonorDetail) (*creator.Creator, error) {
+	c := creator.New()
+
+	var currentTime = time.Now()
+	err := license.SetMeteredKey("301d8f2e0d0c5d045070142329639ac70eda204a4ad3039482d1bd6d023a2f9a")
+
+	robotoFontRegular, err := model.NewPdfFontFromTTFFile("Roboto/Roboto-Regular.ttf")
+	if err != nil {
+		return c, err
+	}
+
+	// robotoFontPro, err := model.NewPdfFontFromTTFFile("Roboto/Roboto-Bold.ttf")
+	if err != nil {
+		return c, err
+	}
+
+	c.SetPageMargins(50, 50, 50, 50)
+
+	normalFont := robotoFontRegular
+	// normalFontColor := creator.ColorRGBFrom8bit(72, 86, 95)
+	normalFontColorGreen := creator.ColorRGBFrom8bit(4, 79, 3)
+	normalFontSize := 10.0
+
+	iDTable := c.NewTable(2)
+	issuerTable := c.NewTable(1)
+	y := c.NewParagraph("Certificate Of Blood Donation")
+	y.SetFont(normalFont)
+	y.SetFontSize(14)
+	y.SetColor(creator.ColorRGBFrom8bit(72, 86, 95))
+	y.SetMargins(50, 0, 10, 50)
+	// ch.Add(y)
+	cell := issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(y)
+
+	d := c.NewParagraph("Blood Donation Camp")
+	d.SetFont(normalFont)
+	d.SetFontSize(10)
+	d.SetColor(normalFontColorGreen)
+	d.SetMargins(50, 0, 0, 50)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(d)
+
+	x := c.NewParagraph("Serial No" + ":" + "__________")
+	x.SetFont(normalFont)
+	x.SetFontSize(normalFontSize)
+	x.SetColor(normalFontColorGreen)
+	x.SetMargins(0, 0, 10, 0)
+	// ch.Add(x)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(x)
+
+	z := c.NewParagraph("Date" + ":" + " " + currentTime.Format("01-02-2006"))
+	z.SetFont(normalFont)
+	z.SetFontSize(normalFontSize)
+	z.SetColor(normalFontColorGreen)
+	z.SetMargins(150, 0, 10, 0)
+	// ch.Add(v)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(z)
+
+	b := c.NewParagraph("We are extremely thankful to" + " " + donorData.First_name + " " + donorData.Last_name + "," + "a resident of" + " " + donorData.Location + "," + "for his valuable cooperation at the Blood Donation Camp on World Blood Donation Day this year October 2022.")
+	b.SetFont(normalFont)
+	b.SetFontSize(normalFontSize)
+	b.SetColor(normalFontColorGreen)
+	b.SetMargins(0, 0, 10, 0)
+	// ch.Add(b)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(b)
+
+	v := c.NewParagraph("BloodGroup" + ":" + "  " + donorData.BloodGroup)
+	v.SetFont(normalFont)
+	v.SetFontSize(normalFontSize)
+	v.SetColor(normalFontColorGreen)
+	v.SetMargins(0, 0, 10, 0)
+	// ch.Add(v)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(v)
+
+	m := c.NewParagraph("Authorized Signatory" + ":" + "____________")
+	m.SetFont(normalFont)
+	m.SetFontSize(normalFontSize)
+	m.SetColor(normalFontColorGreen)
+	m.SetMargins(0, 0, 20, 0)
+	// ch.Add(m)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(m)
+
+	idCell := iDTable.NewCell()
+	idCell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 1)
+	idCell.SetContent(issuerTable)
+
+	c.Draw(iDTable)
+	c.WriteToFile(dir + file + "report.pdf")
+	fmt.Println("c:", c)
+	return c, nil
+}
+
+func ReceiptOfBloodRecieved(dir string, patientData pojo.PatientDetailRequest) (*creator.Creator, error) {
+	file := "ReceiptOfBloodRecieved" + fmt.Sprintf("%v", time.Now().Format("3_4_5_pm"))
+
+	currentTime := time.Now()
+	c := creator.New()
+	err := license.SetMeteredKey("301d8f2e0d0c5d045070142329639ac70eda204a4ad3039482d1bd6d023a2f9a")
+
+	robotoFontRegular, err := model.NewPdfFontFromTTFFile("Roboto/Roboto-Regular.ttf")
+	if err != nil {
+		return c, err
+	}
+
+	// robotoFontPro, err := model.NewPdfFontFromTTFFile("Roboto/Roboto-Bold.ttf")
+	if err != nil {
+		return c, err
+	}
+
+	c.SetPageMargins(50, 50, 50, 50)
+
+	normalFont := robotoFontRegular
+	// normalFontColor := creator.ColorRGBFrom8bit(72, 86, 95)
+	normalFontColorGreen := creator.ColorRGBFrom8bit(4, 79, 3)
+	normalFontSize := 10.0
+
+	iDTable := c.NewTable(2)
+	issuerTable := c.NewTable(1)
+	y := c.NewParagraph("Receipt Of Blood Recieved")
+	y.SetFont(normalFont)
+	y.SetFontSize(10)
+	y.SetColor(creator.ColorRGBFrom8bit(72, 86, 95))
+	y.SetMargins(50, 0, 10, 50)
+	// ch.Add(y)
+	cell := issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(y)
+
+	x := c.NewParagraph("Name" + ":" + " " + patientData.First_name + " " + patientData.Last_name)
+	x.SetFont(normalFont)
+	x.SetFontSize(normalFontSize)
+	x.SetColor(normalFontColorGreen)
+	x.SetMargins(0, 0, 10, 0)
+	// ch.Add(x)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(x)
+
+	v := c.NewParagraph("BloodGroup" + ":" + "  " + patientData.BloodGroup)
+	v.SetFont(normalFont)
+	v.SetFontSize(normalFontSize)
+	v.SetColor(normalFontColorGreen)
+	v.SetMargins(0, 0, 10, 0)
+	// ch.Add(v)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(v)
+
+	m := c.NewParagraph("Unit" + ":" + " " + patientData.ApplyUnits)
+	m.SetFont(normalFont)
+	m.SetFontSize(normalFontSize)
+	m.SetColor(normalFontColorGreen)
+	m.SetMargins(0, 0, 10, 0)
+	// ch.Add(m)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(m)
+
+	z := c.NewParagraph("Date" + ":" + " " + currentTime.Format("01-02-2006"))
+	z.SetFont(normalFont)
+	z.SetFontSize(normalFontSize)
+	z.SetColor(normalFontColorGreen)
+	z.SetMargins(0, 0, 10, 0)
+	// ch.Add(v)
+	cell = issuerTable.NewCell()
+	cell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 0)
+	cell.SetContent(z)
+
+	idCell := iDTable.NewCell()
+	idCell.SetBorder(creator.CellBorderSideAll, creator.CellBorderStyleSingle, 1)
+	idCell.SetContent(issuerTable)
+
+	c.Draw(iDTable)
+	c.WriteToFile(dir + file + "report.pdf")
+	fmt.Println("c:", c)
+	return c, nil
 }

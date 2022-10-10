@@ -11,6 +11,7 @@ import (
 )
 
 var con = services.Connection{}
+var finalResponse pojo.Response
 
 func init() {
 	con.Server = "mongodb://localhost:27017"
@@ -31,7 +32,7 @@ func main() {
 	http.HandleFunc("/apply-blood-data/", applyForBlood)
 	http.HandleFunc("/login/", login)
 	http.HandleFunc("/delete-pending-patient-request/", deletePendingBloodPatientDetails)
-	http.HandleFunc("/search-filter-blood-details/", searchFilterBloodDetails)
+	http.HandleFunc("/search-blood-details/", searchFilterBloodDetails)
 	fmt.Println("Excecuted Main Method")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -47,16 +48,14 @@ func addDonorRecord(w http.ResponseWriter, r *http.Request) {
 	var data pojo.DonorDetailRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	}
 
 	if result, err := con.SaveDonorDetails(data); err != nil {
 
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else {
-		respondWithJson(w, http.StatusAccepted, map[string]string{
-			"message": result + "," + " Donor Record inserted successfully",
-		})
+		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 }
 
@@ -71,16 +70,14 @@ func addPatientRecord(w http.ResponseWriter, r *http.Request) {
 	var patient pojo.PatientDetailRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&patient); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	}
 
 	if result, err := con.SavePatientData(patient); err != nil {
 
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else {
-		respondWithJson(w, http.StatusAccepted, map[string]string{
-			"message": result + "," + "Patient Record inserted successfully",
-		})
+		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 }
 
@@ -102,16 +99,14 @@ func applyForBlood(w http.ResponseWriter, r *http.Request) {
 	var patient pojo.PatientDetailRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&patient); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	}
 
 	if result, err := con.ApplyBloodPatientDetails(patient, tokenId); err != nil {
 
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else {
-		respondWithJson(w, http.StatusAccepted, map[string]string{
-			"message": result,
-		})
+		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 }
 
@@ -135,20 +130,27 @@ func deletePendingBloodPatientDetails(w http.ResponseWriter, r *http.Request) {
 	if result, err := con.DeletePendingBloodPatientDetails(id, tokenId); err != nil {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else {
-		respondWithJson(w, http.StatusBadRequest, result)
+		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 }
 
-func respondWithJson(w http.ResponseWriter, code int, payload interface{}) {
+func respondWithJson(w http.ResponseWriter, code int, payload interface{}, err string) {
 
-	response, _ := json.Marshal(payload)
+	if err == "error" {
+		finalResponse.Success = "false"
+	} else {
+		finalResponse.Success = "true"
+	}
+	finalResponse.SucessCode = fmt.Sprintf("%v", code)
+	finalResponse.Response = payload
+	response, _ := json.Marshal(finalResponse)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)
 }
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
-	respondWithJson(w, code, map[string]string{"error": msg})
+	respondWithJson(w, code, map[string]string{"error": msg}, "error")
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
@@ -162,17 +164,14 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var data pojo.SignInInputRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	}
 
 	if tokenId, err := con.Login(data); err != nil {
 
-		respondWithError(w, http.StatusBadRequest, "Invalid request")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else {
-		respondWithJson(w, http.StatusAccepted, map[string]string{
-			"tokenId": tokenId,
-			"message": "Login Successfully",
-		})
+		respondWithJson(w, http.StatusBadRequest, tokenId, "")
 	}
 }
 
@@ -198,9 +197,9 @@ func searchFilterBloodDetails(w http.ResponseWriter, r *http.Request) {
 	if result, str, err := con.SearchFilterBloodDetails(bloodDetailsRequest, tokenId); err != nil {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	} else if str != "" {
-		respondWithJson(w, http.StatusBadRequest, str)
+		respondWithJson(w, http.StatusBadRequest, str, "")
 	} else {
-		respondWithJson(w, http.StatusBadRequest, result)
+		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 
 }
