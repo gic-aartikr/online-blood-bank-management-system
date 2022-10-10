@@ -407,7 +407,7 @@ func (c *Connection) Login(data pojo.SignInInputRequest) (string, error) {
 	var err error
 	var foundUser *pojo.SignInInput
 
-	cursor, err := CollectionLogin.Find(ctx, bson.D{primitive.E{Key: "email", Value: data.Email}})
+	cursor, err := CollectionLogin.Find(ctx, bson.D{primitive.E{Key: "email", Value: data.Email}, primitive.E{Key: "password", Value: data.Password}})
 
 	if err != nil {
 		return "", errors.New("No record found in db")
@@ -427,11 +427,6 @@ func (c *Connection) Login(data pojo.SignInInputRequest) (string, error) {
 		return "", errors.New("No data present in db for given email")
 	}
 
-	passwordIsValid := passwordVerify(data)
-	if passwordIsValid != nil {
-		return "", errors.New("login or passowrd is incorrect")
-	}
-
 	// str, err := verifyUserId(data)
 
 	// if err != nil {
@@ -443,30 +438,6 @@ func (c *Connection) Login(data pojo.SignInInputRequest) (string, error) {
 	token, _ := GenerateAllTokens(foundUser.Email)
 
 	return token, err
-}
-func passwordVerify(data pojo.SignInInputRequest) error {
-	var passData *pojo.SignInInput
-	var err error
-	cursor, err := CollectionLogin.Find(ctx, bson.D{primitive.E{Key: "password", Value: data.Password}})
-	fmt.Println("cursor:", cursor)
-	if err != nil {
-		return errors.New("login or passowrd is incorrect")
-	}
-
-	for cursor.Next(ctx) {
-		var e pojo.SignInInput
-		err := cursor.Decode(&e)
-		if err != nil {
-			return err
-		}
-		passData = &e
-		fmt.Println("foundUser:", passData)
-	}
-
-	if passData == nil {
-		return errors.New("No data present in db for given password")
-	}
-	return err
 }
 
 func verifyUserId(data pojo.SignInInputRequest) (string, error) {
