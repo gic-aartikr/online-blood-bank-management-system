@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bloodBankManagement/auth"
 	"bloodBankManagement/pojo"
 	"context"
 	"errors"
@@ -70,19 +71,55 @@ func (c *Connection) Connect() {
 	CollectionLogin = client.Database(c.Database).Collection(c.Collection4)
 }
 
-func insertLoginData(email, pass, userId string) error {
+func insertLoginData(email, password, userId string) {
 
-	_, err := CollectionLogin.InsertOne(ctx, bson.M{
-		"email":    email,
-		"password": pass,
-		"user_id":  userId,
-	})
+	// _, err := CollectionLogin.InsertOne(ctx, bson.M{
+	// 	"email":    email,
+	// 	"password": pass,
+	// 	"user_id":  userId,
+	// })
 
+	// if err != nil {
+	// 	return errors.New("Unable to create new record")
+	// }
+
+	// return nil
+
+	data, err := CollectionLogin.Find(ctx, bson.D{primitive.E{Key: "email", Value: email}})
 	if err != nil {
-		return errors.New("Unable to create new record")
+		log.Println("Unable to fetch data from login details :", err)
 	}
+	fmt.Println(data)
+	finalData, err := convertDbResultIntoLoginStruct(data)
+	if err != nil {
+		log.Println("Error while converting into login details struct :", err)
+	}
+	if finalData == nil {
+		var request pojo.SignInInput
+		request.Email = email
+		request.Password = password
+		// request.Active = true
+		saveData, err := CollectionLogin.InsertOne(ctx, request)
+		if err != nil {
+			log.Println("Error while inserting into login details :", err)
+		}
+		fmt.Println("Saved Into Login Details :", saveData.InsertedID)
+	} else {
+		log.Println("User Already Exists!")
+	}
+}
 
-	return nil
+func convertDbResultIntoLoginStruct(fetchDataCursor *mongo.Cursor) ([]*pojo.SignInInput, error) {
+	var data []*pojo.SignInInput
+	for fetchDataCursor.Next(ctx) {
+		var db pojo.SignInInput
+		err := fetchDataCursor.Decode(&db)
+		if err != nil {
+			return data, err
+		}
+		data = append(data, &db)
+	}
+	return data, nil
 }
 
 // ==========================================Donor detail======================================
@@ -157,11 +194,17 @@ func (c *Connection) SavePatientData(reqBody pojo.PatientDetailRequest) (string,
 }
 
 func (e *Connection) ApplyBloodPatientDetails(reqBody pojo.PatientDetailRequest, tokenId string) (string, error) {
-	verifyToken, err := ValidateToken(tokenId)
+	// verifyToken, err := ValidateToken(tokenId)
 
-	if verifyToken != "" {
+	// if err != nil {
 
-		return verifyToken, err
+	// 	return verifyToken, err
+	// }
+
+	saveData, err := SetValueInPatientModel(reqBody)
+	if err != nil {
+		log.Println(err)
+		return "", err
 	}
 
 	deduct, err := deductOrAddBloodUnitsFromBloodDetails(reqBody.BloodGroup, reqBody.ApplyUnits, reqBody.Location, "Deduct")
@@ -169,9 +212,13 @@ func (e *Connection) ApplyBloodPatientDetails(reqBody pojo.PatientDetailRequest,
 		return "", err
 	}
 	fmt.Println(deduct)
-
-	ReceiptOfBloodRecieved(dir, reqBody)
-	return deduct, nil
+	data, err := CollectionPatient.InsertOne(ctx, saveData)
+	if err != nil {
+		log.Println(err)
+		return "", errors.New("Unable to store data")
+	}
+	fmt.Println(data)
+	return "User Saved Successfully", nil
 }
 
 func SetValueInPatientModel(req pojo.PatientDetailRequest) (pojo.PatientDetail, error) {
@@ -184,6 +231,7 @@ func SetValueInPatientModel(req pojo.PatientDetailRequest) (pojo.PatientDetail, 
 	data.BloodGroup = req.BloodGroup
 	data.Active = true
 	data.Location = req.Location
+	data.Phone = req.Phone
 	data.CreatedAt = time.Now()
 	data.ApplyUnits = req.ApplyUnits
 	data.ApplyDate = time.Now()
@@ -254,12 +302,12 @@ func convertUnitsStringIntoInt(units string) (int, error) {
 }
 
 func (e *Connection) DeletePendingBloodPatientDetails(idStr string, tokenId string) (string, error) {
-	verifyToken, err := ValidateToken(tokenId)
+	// verifyToken, err := ValidateToken(tokenId)
 
-	if verifyToken != "" {
+	// if verifyToken != "" {
 
-		return verifyToken, err
-	}
+	// 	return verifyToken, err
+	// }
 
 	id, err := primitive.ObjectIDFromHex(idStr)
 
@@ -298,17 +346,23 @@ func convertDbResultIntoPatientStruct(fetchDataCursor *mongo.Cursor) ([]*pojo.Pa
 	return finaldata, nil
 }
 
+func convertDbResult(fetchDataCursor *mongo.Cursor) (pojo.PatientDetail, error) {
+	var finaldata pojo.PatientDetail
+	for fetchDataCursor.Next(ctx) {
+		var data pojo.PatientDetail
+		err := fetchDataCursor.Decode(&data)
+		if err != nil {
+			return finaldata, err
+		}
+		finaldata = data
+	}
+	return finaldata, nil
+}
+
 /////////////blood detail//////////////////
 
-func (e *Connection) SearchFilterBloodDetails(search pojo.BloodDetailsRequest, tokenId string) ([]*pojo.BloodBankDetail, string, error) {
+func (e *Connection) SearchFilterBloodDetails(search pojo.BloodDetailsRequest) ([]*pojo.BloodBankDetail, error) {
 	var searchData []*pojo.BloodBankDetail
-
-	verifyToken, err := ValidateToken(tokenId)
-
-	if verifyToken != "" {
-
-		return searchData, verifyToken, err
-	}
 
 	filter := bson.D{}
 
@@ -321,20 +375,20 @@ func (e *Connection) SearchFilterBloodDetails(search pojo.BloodDetailsRequest, t
 	if search.DepositDate != "" {
 		depositDate, err := convertDate(search.DepositDate)
 		if err != nil {
-			return searchData, "", err
+			return searchData, err
 		}
 		filter = append(filter, primitive.E{Key: "deposit-date", Value: bson.M{"$regex": depositDate}})
 	}
 	result, err := CollectionBlood.Find(ctx, filter)
 	if err != nil {
-		return searchData, "", err
+		return searchData, err
 	}
 	data, err := convertDbResultIntoBloodStruct(result)
 	if err != nil {
-		return searchData, "", err
+		return searchData, err
 	}
 
-	return data, "", nil
+	return data, nil
 }
 
 func convertDbResultIntoBloodStruct(fetchDataCursor *mongo.Cursor) ([]*pojo.BloodBankDetail, error) {
@@ -435,8 +489,10 @@ func (c *Connection) Login(data pojo.SignInInputRequest) (string, error) {
 
 	// userId := str
 	// token, refreshToken, _ := GenerateAllTokens(foundUser.Email, foundUser.First_name, foundUser.Last_name)
-	token, _ := GenerateAllTokens(foundUser.Email)
-
+	token, err := auth.GenerateAllTokens(foundUser.Email)
+	if err != nil {
+		return "", errors.New("Invalid email id or password")
+	}
 	return token, err
 }
 
@@ -512,50 +568,51 @@ func getPatientIdRecord(recordData *pojo.PatientDetail) string {
 	return userId
 }
 
-func GenerateAllTokens(email string) (signedToken string, err error) {
-	claims := &SignedDetails{
-		Email: email,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Local().Add(time.Hour * time.Duration(1)).Unix(),
-		},
-	}
+// func GenerateAllTokens(email string) (signedToken string, err error) {
+// 	expirationTime := time.Now().Local().Add(time.Hour * time.Duration(1))
+// 	claims := &SignedDetails{
+// 		Email: email,
+// 		StandardClaims: jwt.StandardClaims{
+// 			ExpiresAt: expirationTime.Unix(),
+// 		},
+// 	}
 
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(SECRET_KEY))
+// 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(SECRET_KEY))
 
-	return token, err
-}
+// 	return token, err
+// }
 
 // ValidateToken validates the jwt token
-func ValidateToken(signedToken string) (string, error) {
-	var msg = ""
-	token, err := jwt.ParseWithClaims(
-		signedToken,
-		&SignedDetails{},
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte(SECRET_KEY), nil
-		},
-	)
+// func ValidateToken(signedToken string) (string, error) {
+// 	var msg = ""
+// 	token, err := jwt.ParseWithClaims(
+// 		signedToken,
+// 		&SignedDetails{},
+// 		func(token *jwt.Token) (interface{}, error) {
+// 			return []byte(SECRET_KEY), nil
+// 		},
+// 	)
 
-	if err != nil {
-		msg = err.Error()
-		return msg, err
-	}
+// 	if err != nil {
+// 		msg = err.Error()
+// 		return msg, errors.New("token is expired")
+// 	}
 
-	claims, ok := token.Claims.(*SignedDetails)
-	if !ok {
-		msg = fmt.Sprintf("the token is invalid")
-		msg = err.Error()
-		return msg, err
-	}
+// 	claims, ok := token.Claims.(*SignedDetails)
+// 	if !ok {
+// 		msg = fmt.Sprintf("the token is invalid")
+// 		msg = err.Error()
+// 		return msg, err
+// 	}
 
-	if claims.ExpiresAt < time.Now().Local().Unix() {
-		msg = fmt.Sprintf("token is expired")
-		msg = err.Error()
-		return msg, err
-	}
+// 	if claims.ExpiresAt < time.Now().Unix() {
+// 		msg = fmt.Sprintf("token is expired")
+// 		msg = err.Error()
+// 		return msg, err
+// 	}
 
-	return msg, err
-}
+// 	return msg, err
+// }
 
 func writeToPdf(dir, file string, donorData pojo.DonorDetail) (*creator.Creator, error) {
 	c := creator.New()
@@ -661,7 +718,7 @@ func writeToPdf(dir, file string, donorData pojo.DonorDetail) (*creator.Creator,
 	return c, nil
 }
 
-func ReceiptOfBloodRecieved(dir string, patientData pojo.PatientDetailRequest) (*creator.Creator, error) {
+func ReceiptOfBloodRecieved(dir string, patientData pojo.PatientDetail) (*creator.Creator, error) {
 	file := "ReceiptOfBloodRecieved" + fmt.Sprintf("%v", time.Now().Format("3_4_5_pm"))
 
 	currentTime := time.Now()
@@ -745,4 +802,72 @@ func ReceiptOfBloodRecieved(dir string, patientData pojo.PatientDetailRequest) (
 	c.WriteToFile(dir + file + "report.pdf")
 	fmt.Println("c:", c)
 	return c, nil
+}
+
+func (e *Connection) GivenBloodPatientDetailsById(idStr string) (pojo.PatientDetail, error) {
+	var result pojo.PatientDetail
+	var updatedDocument bson.M
+	id, err := primitive.ObjectIDFromHex(idStr)
+	if err != nil {
+		return result, err
+	}
+	filter := bson.D{
+		{Key: "$and",
+			Value: bson.A{
+				bson.D{{Key: "_id", Value: id}},
+				bson.D{{Key: "active", Value: true}},
+			},
+		},
+	}
+
+	UpdateQuery := bson.D{}
+	UpdateQuery = append(UpdateQuery, primitive.E{Key: "active", Value: false})
+	UpdateQuery = append(UpdateQuery, primitive.E{Key: "given_date", Value: time.Now()})
+
+	update := bson.D{{Key: "$set", Value: UpdateQuery}}
+
+	r := CollectionPatient.FindOneAndUpdate(ctx, filter, update).Decode(&updatedDocument)
+	if r != nil {
+		return result, r
+	}
+	fmt.Println(updatedDocument)
+	if updatedDocument == nil {
+		return result, errors.New("Data not present in db given by Id or it is deactivated")
+	}
+
+	finalData, err := CollectionPatient.Find(ctx, bson.D{primitive.E{Key: "_id", Value: id}})
+
+	if err != nil {
+		log.Println(err)
+		return result, err
+	}
+
+	result, err = convertDbResult(finalData)
+	if err != nil {
+		log.Println(err)
+		return result, err
+	}
+	certificate, err := ReceiptOfBloodRecieved(dir, result)
+	if err != nil {
+		log.Println(err)
+		return result, err
+	}
+	fmt.Println(certificate)
+	return result, nil
+}
+
+func (e *Connection) SearchAllPendingBloodPatientDetails() ([]*pojo.PatientDetail, error) {
+	var finalData []*pojo.PatientDetail
+
+	data, err := CollectionPatient.Find(ctx, bson.D{primitive.E{Key: "active", Value: true}})
+	if err != nil {
+		log.Println(err)
+		return finalData, err
+	}
+	finalData, err = convertDbResultIntoPatientStruct(data)
+	if err != nil {
+		log.Println(err)
+		return finalData, err
+	}
+	return finalData, nil
 }

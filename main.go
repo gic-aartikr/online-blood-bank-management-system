@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bloodBankManagement/auth"
 	"bloodBankManagement/pojo"
 	"bloodBankManagement/services"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 )
 
 var con = services.Connection{}
-var finalResponse pojo.Response
+var responseData pojo.Response
 
 func init() {
 	con.Server = "mongodb://localhost:27017"
@@ -33,6 +35,8 @@ func main() {
 	http.HandleFunc("/login/", login)
 	http.HandleFunc("/delete-pending-patient-request/", deletePendingBloodPatientDetails)
 	http.HandleFunc("/search-blood-details/", searchFilterBloodDetails)
+	http.HandleFunc("/given-blood-patient-details-id/", givenBloodPatientDetailsById)
+	http.HandleFunc("/search-all-pending-patient-details/", searchAllPendingBloodPatientDetails)
 	fmt.Println("Excecuted Main Method")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -96,6 +100,11 @@ func applyForBlood(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Invalid method")
 	}
 
+	err := validateToken(tokenId)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
+		return
+	}
 	var patient pojo.PatientDetailRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&patient); err != nil {
@@ -123,6 +132,12 @@ func deletePendingBloodPatientDetails(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Invalid Method")
 		return
 	}
+
+	err := validateToken(tokenId)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
+		return
+	}
 	path := r.URL.Path
 	segments := strings.Split(path, "/")
 	id := segments[len(segments)-1]
@@ -137,13 +152,13 @@ func deletePendingBloodPatientDetails(w http.ResponseWriter, r *http.Request) {
 func respondWithJson(w http.ResponseWriter, code int, payload interface{}, err string) {
 
 	if err == "error" {
-		finalResponse.Success = "false"
+		responseData.Success = "false"
 	} else {
-		finalResponse.Success = "true"
+		responseData.Success = "true"
 	}
-	finalResponse.SucessCode = fmt.Sprintf("%v", code)
-	finalResponse.Response = payload
-	response, _ := json.Marshal(finalResponse)
+	responseData.SucessCode = fmt.Sprintf("%v", code)
+	responseData.Response = payload
+	response, _ := json.Marshal(responseData)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)
@@ -178,12 +193,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 func searchFilterBloodDetails(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
-	tokenId := r.Header.Get("tokenid")
-
-	if tokenId == "" {
-		respondWithError(w, http.StatusBadRequest, "Unauthorized")
-		return
-	}
 	if r.Method != "POST" {
 		respondWithError(w, http.StatusBadRequest, "Invalid Method")
 		return
@@ -194,12 +203,68 @@ func searchFilterBloodDetails(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
 	}
 
-	if result, str, err := con.SearchFilterBloodDetails(bloodDetailsRequest, tokenId); err != nil {
+	if result, err := con.SearchFilterBloodDetails(bloodDetailsRequest); err != nil {
 		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
-	} else if str != "" {
-		respondWithJson(w, http.StatusBadRequest, str, "")
 	} else {
 		respondWithJson(w, http.StatusBadRequest, result, "")
 	}
 
+}
+
+func givenBloodPatientDetailsById(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	tokenId := r.Header.Get("tokenid")
+
+	if tokenId == "" {
+		respondWithError(w, http.StatusBadRequest, "Unauthorized")
+		return
+	}
+	if r.Method != "GET" {
+		respondWithError(w, http.StatusBadRequest, "Invalid Method")
+		return
+	}
+
+	err := validateToken(tokenId)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
+		return
+	}
+
+	segment := strings.Split(r.URL.Path, "/")
+	id := segment[len(segment)-1]
+	if id == "" {
+		respondWithError(w, http.StatusBadRequest, "Please provide Id for Search")
+	}
+
+	if result, err := con.GivenBloodPatientDetailsById(id); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
+	} else {
+		respondWithJson(w, http.StatusAccepted, result, "")
+	}
+}
+
+func searchAllPendingBloodPatientDetails(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != "GET" {
+		respondWithError(w, http.StatusBadRequest, "Invalid Method")
+		return
+	}
+
+	if result, err := con.SearchAllPendingBloodPatientDetails(); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("%v", err))
+	} else {
+		respondWithJson(w, http.StatusAccepted, result, "")
+	}
+}
+
+func validateToken(token string) error {
+	if token == "" {
+		return errors.New("Please Enter Token")
+	}
+	err := auth.ValidateToken(token)
+	if err != nil {
+		return errors.New("Either Token Is Invalid Or Expired")
+	}
+	return err
 }

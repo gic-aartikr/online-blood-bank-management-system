@@ -61,24 +61,24 @@ type PatientDetail struct {
 	ApplyUnits  string             `bson:"apply_units,omitempty" json:"apply_units,omitempty"`
 	ApplyDate   time.Time          `bson:"apply_date,omitempty" json:"apply_date,omitempty"`
 	GivenDate   time.Time          `bson:"given_date,omitempty" json:"given_date,omitempty"`
-	BloodDate   time.Time          `bson:"blood_date,omitempty" json:"blood_date,omitempty"`
 	CreatedAt   time.Time          `bson:"created_at,omitempty" json:"created_at,omitempty"`
 	UpdatedAt   time.Time          `bson:"updated_at,omitempty" json:"updated_at" bson:"updated_at,omitempty"`
 }
 
 type PatientDetailRequest struct {
-	First_name  string `bson:"first_name,omitempty" json:"first_name" validate:"required,min=2,max=100"`
-	Last_name   string `bson:"last_name,omitempty" json:"last_name" validate:"required,min=2,max=100"`
-	Age         string `bson:"age,omitempty" json:"age,omitempty"`
-	DOB         string `bson:"dob,omitempty" json:"dob,omitempty"`
-	AdharCardNo string `bson:"adhar_card_no,omitempty" json:"adhar_card_no,omitempty"`
-	Email       string `bson:"email,omitempty" json:"email" validate:"email,required"`
-	Password    string `bson:"password,omitempty" json:"password" validate:"required"`
-	Phone       string `bson:"phone,omitempty" json:"phone" validate:"required"`
-	BloodGroup  string `bson:"blood_group,omitempty" json:"blood_group,omitempty"`
-	Location    string `bson:"location,omitempty" json:"location,omitempty"`
-	Active      bool   `bson:"active,omitempty" json:"active,omitempty"`
-	ApplyUnits  string `bson:"apply_units,omitempty" json:"apply_units,omitempty"`
+	First_name  string    `bson:"first_name,omitempty" json:"first_name" validate:"required,min=2,max=100"`
+	Last_name   string    `bson:"last_name,omitempty" json:"last_name" validate:"required,min=2,max=100"`
+	Age         string    `bson:"age,omitempty" json:"age,omitempty"`
+	DOB         string    `bson:"dob,omitempty" json:"dob,omitempty"`
+	AdharCardNo string    `bson:"adhar_card_no,omitempty" json:"adhar_card_no,omitempty"`
+	Email       string    `bson:"email,omitempty" json:"email" validate:"email,required"`
+	Password    string    `bson:"password,omitempty" json:"password" validate:"required"`
+	Phone       string    `bson:"phone,omitempty" json:"phone" validate:"required"`
+	BloodGroup  string    `bson:"blood_group,omitempty" json:"blood_group,omitempty"`
+	GivenDate   time.Time `bson:"given_date,omitempty" json:"given_date,omitempty"`
+	Location    string    `bson:"location,omitempty" json:"location,omitempty"`
+	Active      bool      `bson:"active,omitempty" json:"active,omitempty"`
+	ApplyUnits  string    `bson:"apply_units,omitempty" json:"apply_units,omitempty"`
 }
 type SignInInput struct {
 	ID       primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
